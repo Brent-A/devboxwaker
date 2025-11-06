@@ -155,7 +155,7 @@ function Get-DevBoxConnectionUri {
     )
     
     try {
-        $apiVersion = "2023-04-01"
+        $apiVersion = "2025-02-01"
         $uri = "$Endpoint/projects/$ProjectName/users/me/devboxes/$($DevBoxName)/remoteConnection?api-version=$apiVersion"
         
         $headers = @{
@@ -165,16 +165,38 @@ function Get-DevBoxConnectionUri {
         
         $response = Invoke-RestMethod -Uri $uri -Method Get -Headers $headers -ErrorAction Stop
         
-        # Prefer Windows App (cloudPcConnectionUrl) for modern experience
+        # Log all available connection URLs for debugging
+        Write-Log "Available connection URLs:"
+        if ($response.cloudPcConnectionUrl) { Write-Log "  cloudPcConnectionUrl: $($response.cloudPcConnectionUrl)" }
+        if ($response.rdpConnectionUrl) { Write-Log "  rdpConnectionUrl: $($response.rdpConnectionUrl)" }
+        if ($response.webUrl) { Write-Log "  webUrl: $($response.webUrl)" }
+        
+        # Check if rdpConnectionUrl uses a supported protocol
+        $supportedProtocols = @('ms-cloudpc:', 'ms-remotedesktop:', 'ms-remotedesktop-launch:', 'ms-cp:')
+        $useRdpUrl = $false
+        
+        if ($response.rdpConnectionUrl) {
+            foreach ($protocol in $supportedProtocols) {
+                if ($response.rdpConnectionUrl -like "$protocol*") {
+                    $useRdpUrl = $true
+                    break
+                }
+            }
+        }
+        
+        # Priority: cloudPcConnectionUrl (Windows App native) > supported RDP protocols > webUrl
         if ($response.cloudPcConnectionUrl) {
-            Write-Log "DevBox Windows App connection URL retrieved"
+            Write-Log "Using Cloud PC connection URL (Windows App native)"
             return $response.cloudPcConnectionUrl
-        } elseif ($response.rdpConnectionUrl) {
-            Write-Log "DevBox RDP connection URL retrieved"
+        } elseif ($useRdpUrl) {
+            Write-Log "Using RDP connection URL (supported protocol)"
             return $response.rdpConnectionUrl
         } elseif ($response.webUrl) {
-            Write-Log "DevBox web connection URL retrieved"
+            Write-Log "Using web connection URL (fallback)"
             return $response.webUrl
+        } elseif ($response.rdpConnectionUrl) {
+            Write-Log "Using RDP connection URL (may not be supported)"
+            return $response.rdpConnectionUrl
         } else {
             Write-Log "No connection URL in response"
             return $null
