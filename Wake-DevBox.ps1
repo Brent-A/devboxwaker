@@ -306,6 +306,16 @@ try {
                     
                     Write-Log "DevBox wake process completed - already running."
                     exit 0
+                } elseif ($devBoxState.powerState -eq "Stopping" -or $devBoxState.powerState -eq "Deallocating") {
+                    Write-Log "DevBox is currently shutting down (state: $($devBoxState.powerState)) - cannot wake yet"
+                    Show-Notification -Title "DevBox Shutting Down" -Message "Your DevBox '$DevBoxName' is currently shutting down. Please wait and try again in a few moments."
+                    Write-Log "DevBox wake process aborted - DevBox is shutting down."
+                    exit 0
+                } elseif ($devBoxState.powerState -eq "Starting") {
+                    Write-Log "DevBox is already starting - no need to wake"
+                    Show-Notification -Title "DevBox Starting" -Message "Your DevBox '$DevBoxName' is already starting up. Please wait..."
+                    Write-Log "DevBox wake process completed - already starting."
+                    exit 0
                 }
                 
                 # DevBox is not running, proceed with wake
