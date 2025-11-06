@@ -1,13 +1,14 @@
 # DevBox Waker
 
-Automatically wake your Azure DevBox from hibernation when you log in to your Windows laptop.
+Automatically wake your Azure DevBox from hibernation when you log in to your Windows laptop or unlock your workstation.
 
 ## Overview
 
-This project contains PowerShell scripts that integrate with Windows Task Scheduler to automatically wake your DevBox from hibernation at `https://devbox.microsoft.com/` whenever you log in to your laptop.
+This project contains PowerShell scripts that integrate with Windows Task Scheduler to automatically wake your DevBox from hibernation at `https://devbox.microsoft.com/` whenever you log in to your laptop or unlock your workstation.
 
 **Features:**
-- Automatic DevBox wake on Windows login
+
+- Automatic DevBox wake on Windows login and workstation unlock
 - Monitors operation status until DevBox is ready
 - Shows Windows toast notification when DevBox is running
 - **Two-button notification**: Connect immediately or Hibernate if not needed
@@ -107,7 +108,7 @@ Run the setup script with **Administrator** privileges:
 .\Setup-ScheduledTask.ps1
 ```
 
-This will create a Windows scheduled task that runs `Wake-DevBox.ps1` automatically when you log in.
+This will create a Windows scheduled task that runs `Wake-DevBox.ps1` automatically when you log in or unlock your workstation.
 
 ### 3. Verify the Setup
 
@@ -121,9 +122,14 @@ Get-ScheduledTask -TaskName "Wake DevBox on Login" -TaskPath "\DevBox\"
 
 ## Usage
 
-### Automatic Wake on Login
+### Automatic Wake on Login/Unlock
 
-Once configured, the script will automatically run when you log in to Windows. No manual intervention is required.
+Once configured, the script will automatically run when you:
+
+- Log in to Windows
+- Unlock your workstation (after locking it with Win+L or screen timeout)
+
+No manual intervention is required.
 
 ### Manual Wake
 

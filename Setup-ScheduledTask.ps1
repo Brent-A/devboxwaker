@@ -10,7 +10,7 @@ param(
 
 # Task properties
 $taskName = "Wake DevBox on Login"
-$taskDescription = "Automatically wakes DevBox from hibernation when user logs in"
+$taskDescription = "Automatically wakes DevBox from hibernation when user logs in or unlocks the workstation"
 $taskPath = "\DevBox\"
 
 Write-Host "Setting up scheduled task: $taskName" -ForegroundColor Cyan
@@ -30,8 +30,15 @@ try {
         -Argument "-ExecutionPolicy Bypass -WindowStyle Hidden -File `"$ScriptPath`"" `
         -WorkingDirectory $PSScriptRoot
 
-    # Create the trigger - at user logon
-    $trigger = New-ScheduledTaskTrigger -AtLogOn
+    # Create the triggers - at user logon and on workstation unlock
+    $triggerLogon = New-ScheduledTaskTrigger -AtLogOn
+    
+    # Create unlock trigger using CIM class
+    $CIMTriggerClass = Get-CimClass -ClassName MSFT_TaskSessionStateChangeTrigger -Namespace Root/Microsoft/Windows/TaskScheduler
+    $triggerUnlock = New-CimInstance -CimClass $CIMTriggerClass -ClientOnly
+    $triggerUnlock.StateChange = 8  # 8 = SessionUnlock (TASK_SESSION_STATE_CHANGE_TYPE)
+    $triggerUnlock.UserId = $env:USERNAME
+    $triggerUnlock.Enabled = $true
 
     # Create the principal - run as current user
     $principal = New-ScheduledTaskPrincipal `
@@ -53,7 +60,7 @@ try {
         -TaskName $taskName `
         -TaskPath $taskPath `
         -Action $action `
-        -Trigger $trigger `
+        -Trigger @($triggerLogon, $triggerUnlock) `
         -Principal $principal `
         -Settings $settings `
         -Description $taskDescription `
@@ -62,7 +69,9 @@ try {
     Write-Host "`nScheduled task created successfully!" -ForegroundColor Green
     Write-Host "Task Name: $taskName" -ForegroundColor Green
     Write-Host "Task Path: $taskPath" -ForegroundColor Green
-    Write-Host "`nThe DevBox wake script will run automatically when you log in to Windows." -ForegroundColor Green
+    Write-Host "`nThe DevBox wake script will run automatically when you:" -ForegroundColor Green
+    Write-Host "  - Log in to Windows" -ForegroundColor Green
+    Write-Host "  - Unlock your workstation" -ForegroundColor Green
     
     # Display task information
     Write-Host "`nTask Details:" -ForegroundColor Cyan
