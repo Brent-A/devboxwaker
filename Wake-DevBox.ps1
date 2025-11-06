@@ -123,6 +123,31 @@ function Get-OperationStatus {
     }
 }
 
+function Get-DevBoxState {
+    param(
+        [string]$Endpoint,
+        [string]$Token
+    )
+    
+    try {
+        $apiVersion = "2023-04-01"
+        $uri = "$Endpoint/projects/$ProjectName/users/me/devboxes/$($DevBoxName)?api-version=$apiVersion"
+        
+        $headers = @{
+            "Authorization" = "Bearer $Token"
+            "Content-Type" = "application/json"
+        }
+        
+        $response = Invoke-RestMethod -Uri $uri -Method Get -Headers $headers -ErrorAction Stop
+        
+        Write-Log "DevBox current state: $($response.powerState)"
+        return $response
+    } catch {
+        Write-Log "Failed to get DevBox state: $($_.Exception.Message)"
+        return $null
+    }
+}
+
 function Get-DevBoxConnectionUri {
     param(
         [string]$Endpoint,
@@ -226,84 +251,132 @@ try {
     
     $apiVersion = "2023-04-01"
     $success = $false
+    $workingEndpoint = $null
     
+    # First, find a working endpoint by checking DevBox state
     foreach ($endpoint in $endpoints) {
         Write-Log "Trying endpoint: $endpoint"
-        $uri = "$endpoint/projects/$ProjectName/users/me/devboxes/$($DevBoxName):start?api-version=$apiVersion"
-        
-        # Create headers
-        $headers = @{
-            "Authorization" = "Bearer $token"
-            "Content-Type" = "application/json"
-        }
         
         try {
-            # Make the API call to start the DevBox
-            $response = Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -ErrorAction Stop
+            # Get DevBox state to check if it's already running
+            $devBoxState = Get-DevBoxState -Endpoint $endpoint -Token $token
             
-            Write-Log "DevBox wake command sent successfully!"
-            Write-Log "Response: $($response | ConvertTo-Json -Depth 3)"
-            
-            # Extract operation ID from response
-            if ($response.id) {
-                $operationId = $response.name
-                Write-Log "Monitoring operation: $operationId"
+            if ($devBoxState) {
+                $workingEndpoint = $endpoint
+                Write-Log "Successfully connected to endpoint: $endpoint"
+                Write-Log "DevBox power state: $($devBoxState.powerState)"
                 
-                # Poll for operation completion (max 5 minutes)
-                $maxAttempts = 60  # 5 minutes with 5-second intervals
-                $attempt = 0
-                $operationComplete = $false
-                
-                while ($attempt -lt $maxAttempts -and -not $operationComplete) {
-                    Start-Sleep -Seconds 5
-                    $attempt++
+                # Check if DevBox is already running
+                if ($devBoxState.powerState -eq "Running") {
+                    Write-Log "DevBox is already running - no need to wake"
                     
-                    $status = Get-OperationStatus -OperationId $operationId -Endpoint $endpoint -Token $token
+                    # Get the connection URI
+                    $connectionUri = Get-DevBoxConnectionUri -Endpoint $endpoint -Token $token
                     
-                    if ($status) {
-                        Write-Log "Operation status: $($status.status)"
-                        
-                        if ($status.status -eq "Succeeded") {
-                            $operationComplete = $true
-                            Write-Log "DevBox is now running!"
-                            
-                            # Get the RDP connection URI
-                            $connectionUri = Get-DevBoxConnectionUri -Endpoint $endpoint -Token $token
-                            
-                            # Get the hibernate script path
-                            $hibernateScript = Join-Path $PSScriptRoot "Hibernate-DevBox.ps1"
-                            
-                            if ($connectionUri) {
-                                Show-Notification -Title "DevBox Ready" -Message "Click to connect to '$DevBoxName'" -DevBoxUri $connectionUri -HibernateScriptPath $hibernateScript
-                            } else {
-                                Show-Notification -Title "DevBox Ready" -Message "Your DevBox '$DevBoxName' is now running and ready to use."
-                            }
-                            break
-                        } elseif ($status.status -eq "Failed") {
-                            Write-Log "Operation failed: $($status.error | ConvertTo-Json -Depth 3)"
-                            Show-Notification -Title "DevBox Failed" -Message "Failed to wake DevBox '$DevBoxName'. Check logs for details."
-                            break
-                        }
-                        # Continue polling if status is "Running", "NotStarted", etc.
+                    # Get the hibernate script path
+                    $hibernateScript = Join-Path $PSScriptRoot "Hibernate-DevBox.ps1"
+                    
+                    if ($connectionUri) {
+                        Show-Notification -Title "DevBox Ready" -Message "Your DevBox '$DevBoxName' is already running and ready to use." -DevBoxUri $connectionUri -HibernateScriptPath $hibernateScript
+                    } else {
+                        Show-Notification -Title "DevBox Ready" -Message "Your DevBox '$DevBoxName' is already running and ready to use."
                     }
+                    
+                    Write-Log "DevBox wake process completed - already running."
+                    exit 0
                 }
                 
-                if (-not $operationComplete -and $attempt -ge $maxAttempts) {
-                    Write-Log "Operation monitoring timed out after 5 minutes"
-                    Show-Notification -Title "DevBox Status Unknown" -Message "DevBox '$DevBoxName' wake initiated, but status check timed out."
-                }
+                # DevBox is not running, proceed with wake
+                break
             }
-            
-            $success = $true
-            break
         } catch {
             Write-Log "Failed with endpoint $endpoint - $($_.Exception.Message)"
             continue
         }
     }
     
-    if (-not $success) {
+    if (-not $workingEndpoint) {
         throw "Could not connect to DevBox API with any known endpoint format"
+    }
+    
+    # Show notification that we're waking the DevBox
+    Show-Notification -Title "Waking DevBox" -Message "Starting your DevBox '$DevBoxName'... This may take a few minutes."
+    
+    # Now send the wake command
+    Write-Log "Sending wake command to DevBox..."
+    $uri = "$workingEndpoint/projects/$ProjectName/users/me/devboxes/$($DevBoxName):start?api-version=$apiVersion"
+    
+    # Create headers
+    $headers = @{
+        "Authorization" = "Bearer $token"
+        "Content-Type" = "application/json"
+    }
+    
+    try {
+        # Make the API call to start the DevBox
+        $response = Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -ErrorAction Stop
+        
+        Write-Log "DevBox wake command sent successfully!"
+        Write-Log "Response: $($response | ConvertTo-Json -Depth 3)"
+        
+        # Extract operation ID from response
+        if ($response.id) {
+            $operationId = $response.name
+            Write-Log "Monitoring operation: $operationId"
+            
+            # Poll for operation completion (max 5 minutes)
+            $maxAttempts = 60  # 5 minutes with 5-second intervals
+            $attempt = 0
+            $operationComplete = $false
+            
+            while ($attempt -lt $maxAttempts -and -not $operationComplete) {
+                Start-Sleep -Seconds 5
+                $attempt++
+                
+                $status = Get-OperationStatus -OperationId $operationId -Endpoint $workingEndpoint -Token $token
+                
+                if ($status) {
+                    Write-Log "Operation status: $($status.status)"
+                    
+                    if ($status.status -eq "Succeeded") {
+                        $operationComplete = $true
+                        Write-Log "DevBox is now running!"
+                        
+                        # Get the RDP connection URI
+                        $connectionUri = Get-DevBoxConnectionUri -Endpoint $workingEndpoint -Token $token
+                        
+                        # Get the hibernate script path
+                        $hibernateScript = Join-Path $PSScriptRoot "Hibernate-DevBox.ps1"
+                        
+                        if ($connectionUri) {
+                            Show-Notification -Title "DevBox Ready" -Message "Click to connect to '$DevBoxName'" -DevBoxUri $connectionUri -HibernateScriptPath $hibernateScript
+                        } else {
+                            Show-Notification -Title "DevBox Ready" -Message "Your DevBox '$DevBoxName' is now running and ready to use."
+                        }
+                        break
+                    } elseif ($status.status -eq "Failed") {
+                        Write-Log "Operation failed: $($status.error | ConvertTo-Json -Depth 3)"
+                        Show-Notification -Title "DevBox Failed" -Message "Failed to wake DevBox '$DevBoxName'. Check logs for details."
+                        break
+                    }
+                    # Continue polling if status is "Running", "NotStarted", etc.
+                }
+            }
+            
+            if (-not $operationComplete -and $attempt -ge $maxAttempts) {
+                Write-Log "Operation monitoring timed out after 5 minutes"
+                Show-Notification -Title "DevBox Status Unknown" -Message "DevBox '$DevBoxName' wake initiated, but status check timed out."
+            }
+        }
+        
+        $success = $true
+    } catch {
+        Write-Log "Failed to send wake command - $($_.Exception.Message)"
+        throw
+    }
+    
+    if (-not $success) {
+        throw "Failed to wake DevBox"
     }
     
 } catch {
