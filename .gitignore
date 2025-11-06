@@ -1,0 +1,36 @@
+# Add log files to gitignore
+*.log
+
+# Exclude personal config file (use config.example.json as template)
+config.json
+
+# Downloaded icon file (will be fetched on first run)
+devbox-icon.png
+
+# Internal checklist (not needed in public repo)
+GITHUB_UPLOAD_CHECKLIST.md
+
+# Windows thumbnail cache files
+Thumbs.db
+ehthumbs.db
+ehthumbs_vista.db
+
+# Folder config file
+[Dd]esktop.ini
+
+# Recycle Bin used on file shares
+$RECYCLE.BIN/
+
+# VS Code settings (personal preferences)
+.vscode/settings.json
+.vscode/launch.json
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Temporary files
+*.tmp
+*.temp
+*~
