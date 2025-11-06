@@ -12,6 +12,7 @@ param(
 $taskName = "Wake DevBox on Login"
 $taskDescription = "Automatically wakes DevBox from hibernation when user logs in or unlocks the workstation"
 $taskPath = "\DevBox\"
+$vbsWrapperPath = Join-Path $PSScriptRoot "Run-Hidden.vbs"
 
 Write-Host "Setting up scheduled task: $taskName" -ForegroundColor Cyan
 
@@ -24,10 +25,10 @@ try {
         Unregister-ScheduledTask -TaskName $taskName -TaskPath $taskPath -Confirm:$false
     }
 
-    # Create the action - run PowerShell script
+    # Create the action - run VBScript wrapper to launch PowerShell completely hidden
     $action = New-ScheduledTaskAction `
-        -Execute "PowerShell.exe" `
-        -Argument "-ExecutionPolicy Bypass -WindowStyle Hidden -File `"$ScriptPath`"" `
+        -Execute "wscript.exe" `
+        -Argument "`"$vbsWrapperPath`"" `
         -WorkingDirectory $PSScriptRoot
 
     # Create the triggers - at user logon and on workstation unlock
@@ -53,10 +54,11 @@ try {
         -StartWhenAvailable `
         -ExecutionTimeLimit (New-TimeSpan -Minutes 5) `
         -RestartCount 3 `
-        -RestartInterval (New-TimeSpan -Minutes 1)
+        -RestartInterval (New-TimeSpan -Minutes 1) `
+        -Hidden
 
     # Register the scheduled task
-    Register-ScheduledTask `
+    $task = Register-ScheduledTask `
         -TaskName $taskName `
         -TaskPath $taskPath `
         -Action $action `
@@ -65,6 +67,11 @@ try {
         -Settings $settings `
         -Description $taskDescription `
         -ErrorAction Stop
+    
+    # Additional step: Modify the task to run hidden (no window)
+    # This ensures the task runs with CREATEPROCESS_NOWINDOW flag
+    $task.Settings.Hidden = $true
+    $task | Set-ScheduledTask | Out-Null
 
     Write-Host "`nScheduled task created successfully!" -ForegroundColor Green
     Write-Host "Task Name: $taskName" -ForegroundColor Green
