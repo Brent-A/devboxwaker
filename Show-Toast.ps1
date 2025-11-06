@@ -16,23 +16,23 @@ try {
     $APP_ID = 'DevBox Waker'
 
     # XML-encode the URI and message to prevent parsing errors
-    function Escape-XmlString {
+    function Convert-XmlString {
         param([string]$text)
         return [System.Security.SecurityElement]::Escape($text)
     }
 
-    $escapedTitle = Escape-XmlString $Title
-    $escapedMessage = Escape-XmlString $Message
-    $escapedUri = Escape-XmlString $DevBoxUri
+    $escapedTitle = Convert-XmlString $Title
+    $escapedMessage = Convert-XmlString $Message
+    $escapedUri = Convert-XmlString $DevBoxUri
     
     # Convert Windows path to file:/// URI for batch file
     $hibernateFileUri = ""
     if ($HibernateScriptPath) {
         # Change .ps1 to .bat and create file:/// URI
-        $batPath = $HibernateScriptPath -replace '\.ps1$', '.bat'
-        $hibernateFileUri = "file:///$($batPath -replace '\\', '/')"
+        $batPath = $HibernateScriptPath -replace '\\.ps1$','.bat'
+        $hibernateFileUri = "file:///$($batPath -replace '\\','/')"
     }
-    $escapedHibernateUri = Escape-XmlString $hibernateFileUri
+    $escapedHibernateUri = Convert-XmlString $hibernateFileUri
 
     # Build actions section with both Connect and Hibernate buttons
     $actionsXml = ""
@@ -58,8 +58,8 @@ try {
     $iconPath = Join-Path (Split-Path -Parent $PSCommandPath) "devbox-icon.png"
     $iconXml = ""
     if (Test-Path $iconPath) {
-        $iconUri = "file:///$($iconPath -replace '\\', '/')"
-        $iconXml = "<image placement=`"appLogoOverride`" hint-crop=`"circle`" src=`"$iconUri`"/>"
+        $iconUri = "file:///$($iconPath -replace '\\','/')"
+        $iconXml = "<image placement=`"appLogoOverride`" hint-crop=`"circle`" src=`"$iconUri`/>"
     }
     
     $template = @"
